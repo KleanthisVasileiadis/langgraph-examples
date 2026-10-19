@@ -1,4 +1,4 @@
-# Process model -- team ____________
+# Process model -- team Kleanthis Vasileiadis
 
 This file is a deliverable. Fill it in *before* you implement (Tasks 3a, 4a, 5a), and complete the last sections after you have exported the diagram (Task 2).
 
@@ -19,10 +19,13 @@ Which section belongs to which task:
 ## 0. Three answers about the demo graph (Task 1)
 
 1. A node returns `{"style": "formal"}`. What happens to the other fields of the state?
+The other fields of the state remain unchanged. Only the "style" field is updated.
 
 2. `choose_style` returns a string. Why is that *not* a state change, and why does it matter for the diagram?
+Choose_style is a router node, meaning that it decided what node to execute next and not change the contents of the state.
 
 3. Where would you look to find out why the bot chose the formal branch: in the code, or in the log? What does your answer imply for a system that runs in production?
+I would look to find the answer in the log since trace.decision() traces the selected branches and the reason for the decision
 
 ## 1. The dialog, as a sequence
 
@@ -30,10 +33,10 @@ Who says what, in the shortest complete order. One line per turn. Mark for every
 
 | # | speaker | utterance | component | state after the turn |
 | --- | --- | --- | --- | --- |
-| 1 | user | I would like a Margherita | | |
-| 2 | bot | | | |
-| 3 | user | | | |
-| 4 | bot | | | |
+| 1 | user | I would like a Margherita | - | pizza_name = Margherita |
+| 2 | bot | Where should we deliver? Street, house number and city, for example: 5 Ermou, Athens. | order_form | pizza_name = Margherita, expected = address |
+| 3 | user | 5 Ermou, Athens | - | pizza_name = Margherita, address = Ermou, 5, Athens |
+| 4 | bot | Your Margherita is on its way to 5 Ermou, Athens. Order id:8e8f08e0-63cd-4673-9f42-77c088f4d667. | confirmation | pizza_name = Margherita, address = Ermou, 5, Athens, order_id = 8e8f08e0-63cd-4673-9f42-77c088f4d667, ended = True |
 
 ## 2. The components and their contracts
 
@@ -43,11 +46,11 @@ One row per component, in the six parts from the reference section of the sheet.
 
 | component | reads | writes | calls | rule(s) | guarantee | failure behaviour |
 | --- | --- | --- | --- | --- | --- | --- |
-| router | | | | | | |
-| pizza_recognition | | | | | | |
-| address_recognition | | | | | | |
-| order_form | | | | | | |
-| slots_complete | | | | | | |
+| router | state["input"], state["expected"], state["slots"] | the name of the node that runs next | GET /pizza | 1. if `expected` names a slot, the turn goes to the component that fills it: "pizza_name" -> pizza_recognition, "address" -> address_recognition 2. an utterance with ordering intent, or naming an item of the menu, or arriving while an order is in progress, starts the ordering branch (the router of slide 1.34 knows only "order" and "pizza"; this one adds ORDER_INTENT and the menu) 3. anything else gets help | returns exactly one of: "pizza_recognition","address_recognition", "help" | - |
+| pizza_recognition | state["input"], state["slots"], state["expected"] | slots.pizza_name, slots.pizza_id | GET /pizza | 1. the menu is data: names come from GET /pizza, never from code 2. a menu name mentioned literally in the utterance wins (compared case-insensitively) 3. otherwise: one token of the utterance is close to a menu name-- difflib ratio >= 0.80, token of >= 4 letters, both sides lower-cased for the comparison 4. several candidates -> the first one in menu order wins | slots.pizza_name, slots.pizza_id, The component never writes any other | nothing recognised -> empty patch `{}`|
+| address_recognition | state["input"], state["slots"], state["expected"] | slots.address | POST /address/validate | 1. two accepted orders, both ending in ", <city>": "5 Ermou, Athens"   (number first) "Ermou 5, Athens"   (number last -- how Greek addresses are written) 2. filler words around the match are removed, not parsed 3. the address is checked against POST /address/validate | complete or nothing | empty patch `{}` |
+| order_form | state["slots"], state["expected"] | expected, messages | - | 1. ask for the first missing slot, in the order of REQUIRED 2. asking twice for the same slot is prefixed with REPEAT, so the user hears that we did not understand 3. nothing missing -> say nothing, set expected = None | always names the slot that question was about (or None) | none |
+| slots_complete | state["slots"] | True when every slot of REQUIRED is present, False otherwise | - | - | True is only ever returned for a frame that order_placement can use | none |
 | order_placement | | | | | | |
 | confirmation | | | | | | |
 | help | | | | | | |
@@ -67,7 +70,35 @@ flowchart TD
 Run `python demo_visualize.py --pizza`, then paste the content of `docs/pizza-process-model.mmd` here and commit `docs/pizza-process-model.png` next to it.
 
 ```mermaid
-%% TODO: paste the exported Mermaid source
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	router(router)
+	pizza_recognition(pizza_recognition)
+	address_recognition(address_recognition)
+	order_form(order_form)
+	order_placement(order_placement)
+	confirmation(confirmation)
+	help(help)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> router;
+	address_recognition --> order_form;
+	order_form -. &nbsp;False&nbsp; .-> __end__;
+	order_form -. &nbsp;True&nbsp; .-> order_placement;
+	order_placement --> confirmation;
+	pizza_recognition --> address_recognition;
+	router -.-> address_recognition;
+	router -.-> help;
+	router -.-> pizza_recognition;
+	confirmation --> __end__;
+	help --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
 ```
 
 ## 5. Differences between 3 and 4
@@ -86,7 +117,12 @@ Three kinds, and the difference matters: *(a) the type lacks a field* (a postcod
 
 | # | utterance | what should happen | what happens now | why the rule fails | kind (a/b/c) |
 | --- | --- | --- | --- | --- | --- |
-| 1 | | | | | |
+| 1 | Deliver to 5 Ermou Athens | Recognize house number 5, street Ermou, and city Athens. | The address pattern does not match the expected format. | Both address patterns require a comma before the city. | b |
+| 2 | Deliver to 5 Ermou Street, Athens, 105 63 | Recognize the street, house number, city, and postcode. | The postcode is not stored as part of the address. | The address structure has no postcode field, and the regex does not capture a postcode separately. | a |
+| 3 | Deliver to 28is Oktovriou 5, Athens | Recognize street 28is Oktovriou, house number 5, and city Athens. | The parser may interpret Oktovriou as the street and 28 as the house number, or otherwise extract incorrect components. | NUMBER_LAST can interpret the leading number in a street name as the house number because it is designed for addresses where the house number comes last. | c |
+| 4 | Deliver to 5 Ermou, Athens, Attica | Recognize street Ermou, house number 5, and city Athens, with Attica handled separately if supported. | The city capture may include Athens, Attica, causing address validation to fail. | The CITY pattern permits spaces and hyphens, but does not explicitly separate a city from a region. | b |
+| 5 | Deliver to apartment 5, 12 Ermou Street, Athens | Recognize the correct street and house number, ignoring the apartment number or storing it separately. | The parser may fail to match the address or extract incorrect components. | The patterns do not explicitly support apartment numbers or additional address details before the street. | b |
+
 
 ## 7. Contract hand-over (Task 7)
 

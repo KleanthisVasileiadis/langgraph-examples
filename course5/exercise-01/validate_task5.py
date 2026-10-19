@@ -48,6 +48,11 @@ DIALOGS: list[tuple[str, list[str], str]] = [
     # TODO: one dialog of your own. Ideas: the user changes the pizza half way
     #       through, gives an address that does not exist, orders two pizzas,
     #       or answers the address question with only a street.
+    (
+        "the user gives a wrong adress",
+        ["i want a pizza", "a Diavola", "Ermou", "Ermou 5, Athens"],
+        "Showcases the menu, Orders a Diavola, Wrong street, Correct street",
+    )
 ]
 
 

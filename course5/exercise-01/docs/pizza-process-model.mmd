@@ -1,0 +1,29 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	router(router)
+	pizza_recognition(pizza_recognition)
+	address_recognition(address_recognition)
+	order_form(order_form)
+	order_placement(order_placement)
+	confirmation(confirmation)
+	help(help)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> router;
+	address_recognition --> order_form;
+	order_form -. &nbsp;False&nbsp; .-> __end__;
+	order_form -. &nbsp;True&nbsp; .-> order_placement;
+	order_placement --> confirmation;
+	pizza_recognition --> address_recognition;
+	router -.-> address_recognition;
+	router -.-> help;
+	router -.-> pizza_recognition;
+	confirmation --> __end__;
+	help --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

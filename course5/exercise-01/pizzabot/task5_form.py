@@ -94,8 +94,28 @@ def route(state: ChatbotState) -> str:
             rule nobody can review.
     """
     text = state["input"].lower()
+    expected = state["expected"]
+    slots = state["slots"]
 
-    return trace.decision("router", "help", "nothing implemented yet")
+    if expected == "pizza_name":
+        return trace.decision("router", "pizza_recognition","waiting for pizza_name")
+    elif expected == "address":
+        return trace.decision("router", "address_recognition","waiting for address")
+
+    for intent in ORDER_INTENT:
+        if intent in text:
+            return trace.decision("router", "pizza_recognition", "ordering intent")
+
+    pizza_names = pizza_api.menu_names()
+    for name in pizza_names:
+        if name.lower() in text:
+            return trace.decision("router", "pizza_recognition", "menu item")
+
+    order_in_progress = any(slots.get(slot) for slot in REQUIRED)
+    if order_in_progress:
+        return trace.decision("router", "pizza_recognition", "order in progress")
+    
+    return trace.decision("router", "help", "no ordering intent found")
 
 
 # -------------------------------------------------------------- the form --
@@ -113,9 +133,30 @@ def order_form(state: ChatbotState) -> dict:
     """
     trace.received("order_form", state, "slots", "expected")
 
-    trace.doing("order_form", "nothing implemented yet -> asking nothing")
-    return trace.returns("order_form", {"expected": None}, next_step="slots_complete")
+    slots = state["slots"]
+    expected = state["expected"]    
 
+    missing_slots = []
+    for slot in REQUIRED:
+        if slot not in slots:
+            missing_slots.append(slot)
+
+    if not missing_slots:
+        trace.doing("order_form","all required slots are filled")
+        return trace.returns("order_form", {"expected": None}, next_step="slots_complete")
+
+    slot = missing_slots[0]
+    if slot == "pizza_name":
+        question = QUESTIONS[slot].format(menu=", ".join(pizza_api.menu_names()))
+    else:
+        question = QUESTIONS[slot]
+
+    if expected == slot:
+        question = REPEAT + question
+
+    trace.doing("order_form",f"asking for missing slot: {slot}")
+
+    return trace.returns("order_form",{"expected": slot, **say(state, question)}, next_step="slots_complete")
 
 def slots_complete(state: ChatbotState) -> bool:
     """The condition on the edge: may we place the order?
@@ -123,7 +164,12 @@ def slots_complete(state: ChatbotState) -> bool:
     TODO 3: return True exactly when every slot of REQUIRED is present in
             state["slots"], and log the decision with trace.decision().
     """
-    return False
+    slots = state["slots"]
+    for slot in REQUIRED:
+        if slot not in slots:
+            return False
+
+    return True
 
 
 # ------------------------------------------------- given: the last two nodes --

@@ -30,6 +30,9 @@ CASES: list[tuple[str, str]] = [
     #       written in lower case, a name with a Greek article (mia Margherita), the
     #       name in Greek script (Μαργαρίτα), a typo in the middle of a long word, a
     #       pizza that is not on the menu.
+    ("i want margherita",                            "pizza_name = Margherita (exact)"),
+    ("i would like one Μαργαρίτα",                   "nothing recognised, silent"),
+    ("i want a BBQ pizza",                           "nothing recognised, silent"),
 ]
 
 

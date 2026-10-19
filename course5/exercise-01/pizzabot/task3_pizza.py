@@ -54,6 +54,10 @@ def _literal_mention(text: str, names: list[str]) -> str | None:
             so compare `name.lower()` with `text` -- but return `name` unchanged,
             because the guarantee says the slot holds the menu spelling.
     """
+    for name in names:
+        if name.lower() in text:
+            return name
+
     return None
 
 
@@ -76,6 +80,21 @@ def _fuzzy_match(text: str, names: list[str]) -> tuple[str, float, str] | None:
             four-letter word scores 0.75 and is rejected, one in a ten-letter
             word scores ~0.95.
     """
+    tokens = TOKEN.findall(text)
+
+    best = ("", 0.0, "")
+    for token in tokens:
+        if len(token) >= MIN_TOKEN_LENGTH:
+            for name in names:
+                variants = list(set([name] + TOKEN.findall(name)))
+                for variant in variants:
+                    res = difflib.SequenceMatcher(None, token.lower(), variant.lower()).ratio()
+                    if res >= FUZZY_THRESHOLD and res > best[1]:
+                        best = (name, res, token)
+
+    if best[1] != 0.0:
+        return best
+
     return None
 
 
@@ -86,7 +105,6 @@ def recognize_pizza(state: ChatbotState) -> dict:
     text = state["input"].lower()
     names = pizza_api.menu_names()          # rule 1: the menu is data
     trace.doing("pizza_recognition", f"menu has {len(names)} items: {', '.join(names[:4])}, ...")
-
     # TODO 3: try _literal_mention first, then _fuzzy_match. If one of them found a
     #         name, build the patch:
     #
@@ -104,7 +122,28 @@ def recognize_pizza(state: ChatbotState) -> dict:
     #         Log *which rule* matched with trace.doing() before you return --
     #         a component that cannot explain its decision is not finished.
 
-    trace.doing("pizza_recognition", "nothing implemented yet -> staying silent")
+    literal_match_res = _literal_mention(text, names)
+    if literal_match_res is not None:
+        trace.doing("pizza_recognition", f"matched by literal rule: {literal_match_res}")
+        slots = {**state["slots"],
+                "pizza_name": literal_match_res,
+                "pizza_id": pizza_api.pizza_id_for(literal_match_res)}
+        return trace.returns("pizza_recognition",
+                            {"slots": slots},
+                            next_step="address_recognition (fixed edge)")
+
+    else:
+        fuzzy_match_res = _fuzzy_match(text,names)
+        if fuzzy_match_res is not None:
+            trace.doing("pizza_recognition",f"matched by fuzzy rule: {fuzzy_match_res}")
+            slots = {**state["slots"],
+                    "pizza_name": fuzzy_match_res[0],
+                    "pizza_id": pizza_api.pizza_id_for(fuzzy_match_res[0])}
+            return trace.returns("pizza_recognition",
+                                {"slots": slots},
+                                next_step="address_recognition (fixed edge)")
+
+
     return trace.returns("pizza_recognition", {}, next_step="address_recognition")
 
 

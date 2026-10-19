@@ -26,6 +26,9 @@ CASES: list[tuple[str, str]] = [
     # TODO: three cases of your own. Ideas: a flat number, a postcode, an
     #       address in a language you speak, a second address in the same
     #       sentence, a city written in lower case.
+    ("5",                                                   "nothing -- no street, no city"),
+    ("16451 5 Ermou, Athens",                               "5 / Ermou / Athens"),
+    ("5 Ermou, Athens 12b Akti Miaouli, Piraeus",           "5 / Ermou / Athens"),
 ]
 
 

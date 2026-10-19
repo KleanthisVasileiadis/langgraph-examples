@@ -58,7 +58,7 @@ CITY = rf"{WORD}(?:[ \-]{WORD}){{0,3}}"  # Athens, Agia Paraskevi, Saint-Priest-
 #         NUMBER_LAST : <street> <number> , <city>
 #
 NUMBER_FIRST = re.compile(rf"(?P<house_number>{NUMBER})\s+(?P<street>{STREET})\s*,\s*(?P<city>{CITY})", re.UNICODE)
-NUMBER_LAST = re.compile(r"^$")     # <- replace this
+NUMBER_LAST = re.compile(rf"(?P<street>{STREET})\s+(?P<house_number>{NUMBER})\s*,\s*(?P<city>{CITY})", re.UNICODE)     # <- replace this
 
 
 def _strip_filler(text: str) -> str:
@@ -81,6 +81,23 @@ def find_address(text: str) -> dict | None:
             of them becomes empty), remove spaces inside the house number, and
             return the dict. Return None when no pattern matched.
     """
+    """Find an address and clean its captured components."""
+
+    for pattern in [NUMBER_FIRST, NUMBER_LAST]:
+        match = pattern.search(text)
+        if match is None:
+            continue
+
+        groups = match.groupdict()
+
+        street = _strip_filler(groups["street"])
+        city = _strip_filler(groups["city"])
+        if not street or not city:
+            continue
+
+        house_number = re.sub(r"\s+","",groups["house_number"])
+        return {"street": street,"house_number": house_number,"city": city}
+
     return None
 
 
